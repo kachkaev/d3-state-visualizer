@@ -18,7 +18,7 @@ const defaultOptions = {
         collapsed: 'lightsteelblue',
         parent: 'white'
       },
-      radius: 5
+      radius: 7
     },
     text: {
       colors: {
@@ -119,6 +119,27 @@ export default function(DOMNode, options = {}) {
     layout.sort((a, b) => b.name.toLowerCase() < a.name.toLowerCase() ? 1 : -1)
   }
 
+  let previousNodePositionsById = {
+    root: {
+      id: 'root',
+      x: height / 2,
+      y: 0
+    }
+  };
+
+  function findParentNodePosition(nodePositionsById, nodeId, filter) {
+    let currentPosition = nodePositionsById[nodeId];
+    while (currentPosition) {
+      currentPosition = nodePositionsById[currentPosition.parentId];
+      if (!currentPosition) {
+        return null;
+      }
+      if (!filter || filter(currentPosition)) {
+        return currentPosition;
+      }
+    }
+  }
+
   return function renderChart(nextState = tree || state) {
     data = !tree ? map2tree(nextState, {key: rootKeyName, pushMethod}) : nextState
 
@@ -130,12 +151,16 @@ export default function(DOMNode, options = {}) {
     let maxLabelLength = 0
 
     visit(data,
-        node => maxLabelLength = Math.max(node.name.length, maxLabelLength),
-        node => node.children && node.children.length > 0 ? node.children : null
+        node => {
+          maxLabelLength = Math.max(node.name.length, maxLabelLength);
+          node.id = node.id || 'root';
+        },
+        node => node.children && node.children.length > 0 ? node.children.map((c) => {
+          c.id = `${node.id || ''}|${c.name}`;
+          return c;
+        }) : null
     )
 
-    data.x0 = height / 2
-    data.y0 = 0
     /*eslint-disable*/
     update(data)
     /*eslint-enable*/
@@ -153,15 +178,30 @@ export default function(DOMNode, options = {}) {
 
       nodes.forEach(node => node.y = node.depth * (maxLabelLength * 7 * widthBetweenNodesCoeff))
 
+      const nodesById = {};
+      nodes.forEach(node => nodesById[node.id] = node);
+
+      const nodePositions = nodes.map(n => ({
+        parentId: n.parent && n.parent.id,
+        id: n.id,
+        x: n.x,
+        y: n.y
+      }));
+      const nodePositionsById = {};
+      nodePositions.forEach(node => nodePositionsById[node.id] = node);
+
       // process the node selection
       let node = vis.selectAll('g.node')
         .property('__oldData__', d => d)
         .data(nodes, d => d.id || (d.id = ++nodeIndex))
-
       let nodeEnter = node.enter().append('g')
         .attr({
           'class': 'node',
-          transform: d => `translate(${source.y0},${source.x0})`
+          transform: d => {
+            const position = findParentNodePosition(nodePositionsById, d.id, (n) => previousNodePositionsById[n.id]);
+            const previousPosition = position && previousNodePositionsById[position.id] || previousNodePositionsById['root'];
+            return `translate(${previousPosition.y},${previousPosition.x})`
+          }
         })
         .style({
           fill: style.text.colors.default,
@@ -221,9 +261,6 @@ export default function(DOMNode, options = {}) {
 
       // change the circle fill depending on whether it has children and is collapsed
       node.select('circle.nodeCircle')
-        .attr({
-          r: style.node.radius
-        })
         .style({
           stroke: 'black',
           'stroke-width': '1.5px',
@@ -242,15 +279,15 @@ export default function(DOMNode, options = {}) {
         .style('fill-opacity', 1)
 
       // restore the circle
-      nodeUpdate.select('circle').attr('r', 7)
+      nodeUpdate.select('circle').attr('r', style.node.radius)
 
       // blink updated nodes
-      nodeUpdate.filter(function flick(d) {
+      node.filter(function flick(d) {
         // test whether the relevant properties of d match
         // the equivalent property of the oldData
         // also test whether the old data exists,
         // to catch the entering elements!
-        return (!this.__oldData__ || d.value !== this.__oldData__.value)
+        return (this.__oldData__ && d.value !== this.__oldData__.value)
       })
         .style('fill-opacity', '0.3').transition()
         .duration(100).style('fill-opacity', '1')
@@ -259,7 +296,10 @@ export default function(DOMNode, options = {}) {
       let nodeExit = node.exit().transition()
         .duration(transitionDuration)
         .attr({
-          transform: d => `translate(${source.y},${source.x})`
+          transform: d => {
+            const parent = nodesById[d.parent && d.parent.id] || source;
+            return `translate(${parent.y},${parent.x})`
+          }
         })
         .remove()
 
@@ -278,10 +318,11 @@ export default function(DOMNode, options = {}) {
         .attr({
           'class': 'link',
           d: d => {
+            const nodeFrom = nodesById[d.source.id] || source;
             let o = {
-              x: source.x0,
-              y: source.y0
-            }
+                x: nodeFrom.x0 || nodeFrom.x,
+                y: nodeFrom.y0 || nodeFrom.y
+              }
             return diagonal({
               source: o,
               target: o
@@ -302,10 +343,11 @@ export default function(DOMNode, options = {}) {
         .duration(transitionDuration)
         .attr({
           d: d => {
+            const nodeFrom = nodesById[d.source.id] || source;
             let o = {
-              x: source.x,
-              y: source.y
-            }
+                x: nodeFrom.x,
+                y: nodeFrom.y
+              }
             return diagonal({
               source: o,
               target: o
@@ -318,10 +360,7 @@ export default function(DOMNode, options = {}) {
       node.property('__oldData__', null)
 
       // stash the old positions for transition
-      nodes.forEach(d => {
-        d.x0 = d.x
-        d.y0 = d.y
-      })
+      previousNodePositionsById = nodePositionsById;
     }
   }
 }
