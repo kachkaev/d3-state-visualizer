@@ -199,7 +199,7 @@ export default function(DOMNode, options = {}) {
           'class': 'node',
           transform: d => {
             const position = findParentNodePosition(nodePositionsById, d.id, (n) => previousNodePositionsById[n.id])
-            const previousPosition = position && previousNodePositionsById[position.id] || previousNodePositionsById['root']
+            const previousPosition = position && previousNodePositionsById[position.id] || previousNodePositionsById.root
             return `translate(${previousPosition.y},${previousPosition.x})`
           }
         })
@@ -305,7 +305,7 @@ export default function(DOMNode, options = {}) {
         .attr({
           transform: d => {
             const position = findParentNodePosition(previousNodePositionsById, d.id, (n) => nodePositionsById[n.id])
-            const futurePosition = position && nodePositionsById[position.id] || nodePositionsById['root']
+            const futurePosition = position && nodePositionsById[position.id] || nodePositionsById.root
             return `translate(${futurePosition.y},${futurePosition.x})`
           }
         })
@@ -327,7 +327,7 @@ export default function(DOMNode, options = {}) {
           'class': 'link',
           d: d => {
             const position = findParentNodePosition(nodePositionsById, d.target.id, (n) => previousNodePositionsById[n.id])
-            const previousPosition = position && previousNodePositionsById[position.id] || previousNodePositionsById['root']
+            const previousPosition = position && previousNodePositionsById[position.id] || previousNodePositionsById.root
             return diagonal({
               source: previousPosition,
               target: previousPosition
@@ -350,7 +350,7 @@ export default function(DOMNode, options = {}) {
         .attr({
           d: d => {
             const position = findParentNodePosition(previousNodePositionsById, d.target.id, (n) => nodePositionsById[n.id])
-            const futurePosition = position && nodePositionsById[position.id] || nodePositionsById['root']
+            const futurePosition = position && nodePositionsById[position.id] || nodePositionsById.root
             return diagonal({
               source: futurePosition,
               target: futurePosition
